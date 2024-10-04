@@ -97,7 +97,7 @@ def scrape_direccion(direccion: str):
 
         # Espera a que aparezca el campo oculto strCbml y tenga un valor
         try:
-            WebDriverWait(driver, 30).until(
+            WebDriverWait(driver, 60).until(
                 lambda driver: driver.find_element(By.ID, 'strCbml').get_attribute('value') != ''
             )
             print('"strCbml" encontrado y tiene un valor.')
