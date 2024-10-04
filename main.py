@@ -10,6 +10,7 @@ import random
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+import traceback  # Importar traceback para obtener detalles completos de excepciones
 
 app = FastAPI()
 
@@ -46,6 +47,7 @@ def scrape_direccion(direccion: str):
         print("ChromeDriver iniciado correctamente.")
     except Exception as e:
         print(f"Error al iniciar ChromeDriver: {e}")
+        traceback.print_exc()  # Imprimir el stack trace completo
         raise HTTPException(status_code=500, detail=f"Error al iniciar el navegador: {str(e)}")
 
     # Inicializar el diccionario para almacenar los resultados
@@ -109,6 +111,7 @@ def scrape_direccion(direccion: str):
             print('Valor de strCbml:', strCbml_value)
         except Exception as e:
             print(f"Error al obtener strCbml: {e}")
+            traceback.print_exc()  # Imprimir el stack trace completo
             raise HTTPException(status_code=500, detail=f"Error durante el scraping: {str(e)}")
 
         # Itera sobre los radio buttons del 1 al 15 usando XPath
@@ -159,9 +162,11 @@ def scrape_direccion(direccion: str):
 
                 except Exception as e:
                     print(f'Error al buscar tabla para el radio button {i}: {e}')
+                    traceback.print_exc()  # Imprimir el stack trace completo
 
             except Exception as e:
                 print(f'Error en el radio button {i}: {e}')
+                traceback.print_exc()  # Imprimir el stack trace completo
 
             # Pausa pequeña entre iteraciones
             time.sleep(0.5)
@@ -176,6 +181,7 @@ def scrape_direccion(direccion: str):
         raise http_exc
     except Exception as e:
         print(f"Excepción en scrape_direccion: {e}")
+        traceback.print_exc()  # Imprimir el stack trace completo
         raise HTTPException(status_code=500, detail=f"Error durante el scraping: {str(e)}")
     finally:
         # Cierra el navegador
@@ -194,4 +200,5 @@ async def scrape_direccion_endpoint(direccion: DireccionInput):
         raise http_exc
     except Exception as e:
         print(f"Excepción no manejada: {e}")
+        traceback.print_exc()  # Imprimir el stack trace completo
         raise HTTPException(status_code=500, detail=f"Error inesperado: {str(e)}")
