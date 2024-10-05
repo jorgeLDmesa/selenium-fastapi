@@ -34,6 +34,7 @@ def scrape_direccion(direccion: str):
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
     options.add_argument('--disable-gpu')
+    options.add_argument('--window-size=1920,1080')
     user_agents = [
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.1 Safari/605.1.15",
@@ -91,6 +92,8 @@ def scrape_direccion(direccion: str):
         )
         search_button.click()
         print('Botón "Buscar" clickeado')
+
+        driver.implicitly_wait(30)
 
         # Añadir log antes de esperar por 'strCbml'
         print('Esperando el campo "strCbml"')
