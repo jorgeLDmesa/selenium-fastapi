@@ -112,6 +112,8 @@ def scrape_direccion(direccion: str):
         except Exception as e:
             print(f"Error al obtener strCbml: {e}")
             traceback.print_exc()  # Imprimir el stack trace completo
+            with open('pagina_error.html', 'w', encoding='utf-8') as f:
+                f.write(driver.page_source)
             raise HTTPException(status_code=500, detail=f"Error durante el scraping: {str(e)}")
 
         # Itera sobre los radio buttons del 1 al 15 usando XPath
