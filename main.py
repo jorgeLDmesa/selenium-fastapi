@@ -11,6 +11,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import traceback  # Importar traceback para obtener detalles completos de excepciones
+from selenium.webdriver.common.keys import Keys
 
 app = FastAPI()
 
@@ -207,3 +208,114 @@ async def scrape_direccion_endpoint(direccion: DireccionInput):
         print(f"Excepción no manejada: {e}")
         traceback.print_exc()  # Imprimir el stack trace completo
         raise HTTPException(status_code=500, detail=f"Error inesperado: {str(e)}")
+    
+class MunicipioInput(BaseModel):
+    municipio: str
+
+def scrape_resultados_electorales(municipio: str):
+    options = webdriver.ChromeOptions()
+    options.add_argument('--ignore-certificate-errors')
+    options.add_argument('--ignore-certificate-errors-spki-list')
+    options.add_argument('--headless')
+    options.add_argument('--no-sandbox')
+    options.add_argument('--disable-dev-shm-usage')
+    options.add_argument('--disable-gpu')
+    options.add_argument('--window-size=1920,1080')
+    options.add_argument("--disable-notifications")
+
+    try:
+        driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+        wait = WebDriverWait(driver, 20)
+        
+        # Cargar la página
+        url = "https://resultadospreccongreso.registraduria.gov.co/senado/0"
+        driver.get(url)
+        
+        # Buscar municipio
+        search_input = WebDriverWait(driver, 20).until(
+            EC.element_to_be_clickable((By.ID, "downshift-0-input"))
+        )
+        time.sleep(3)
+        search_input.clear()
+        search_input.send_keys(municipio)
+        time.sleep(2)
+        search_input.send_keys(Keys.ARROW_DOWN)
+        search_input.send_keys(Keys.ENTER)
+        time.sleep(5)
+
+        # Esperar a que los botones estén presentes
+        js_script = "return document.querySelectorAll('div.containerMasMenos button').length > 0;"
+        wait.until(lambda driver: driver.execute_script(js_script))
+        
+        # Recolectar información de partidos
+        partidos_info = {}
+        nombres_partidos = driver.find_elements(By.CLASS_NAME, "FilaTablaPartidos__NombrePartido-jcnt0x-7")
+        porcentajes = driver.find_elements(By.CLASS_NAME, "porcAgr")
+        votos = driver.find_elements(By.CLASS_NAME, "numAgr")
+        
+        for nombre, porcentaje, votos in zip(nombres_partidos, porcentajes, votos):
+            partidos_info[nombre.text] = {"porcentaje": porcentaje.text, "votos": votos.text, "candidatos": []}
+
+        # Obtener botones
+        botones = driver.execute_script(
+            "return Array.from(document.querySelectorAll('div.containerMasMenos button'));"
+        )
+
+        # Procesar candidatos para cada partido
+        for boton, partido_nombre in zip(botones, partidos_info.keys()):
+            driver.execute_script("arguments[0].scrollIntoView(true);", boton)
+            time.sleep(1)
+            driver.execute_script("arguments[0].click();", boton)
+            
+            WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.CLASS_NAME, "FilaTablaPartidos__ContainerLista-jcnt0x-3"))
+            )
+            
+            container = driver.find_element(By.CLASS_NAME, "FilaTablaPartidos__ContainerLista-jcnt0x-3")
+            candidatos = container.find_elements(By.CLASS_NAME, "FilaTablaPartidos__ElementoCandidatos-jcnt0x-5")
+            
+            candidatos_procesados = 0
+            for candidato in candidatos:
+                try:
+                    nombre = candidato.find_element(By.CLASS_NAME, "FilaTablaPartidos__NombreCandidato-jcnt0x-4").text
+                    porcentaje = candidato.find_element(By.CLASS_NAME, "percent").text
+                    votos = candidato.find_elements(By.TAG_NAME, "p")[2].text
+                    
+                    partidos_info[partido_nombre]["candidatos"].append({
+                        "nombre": nombre,
+                        "porcentaje": porcentaje,
+                        "votos": votos
+                    })
+                    
+                    candidatos_procesados += 1
+                    if candidatos_procesados >= 5:
+                        break
+                except:
+                    continue
+            
+            driver.execute_script("arguments[0].click();", boton)
+            time.sleep(0.5)
+
+        return json.dumps(partidos_info, ensure_ascii=False)
+
+    except Exception as e:
+        print(f"Error en scrape_resultados_electorales: {e}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Error durante el scraping: {str(e)}")
+    finally:
+        driver.quit()
+
+@app.post("/scrape_resultados")
+async def scrape_resultados_endpoint(municipio: MunicipioInput):
+    try:
+        print(f"Solicitud recibida para scrape_resultados: {municipio.municipio}")
+        resultados = scrape_resultados_electorales(municipio.municipio)
+        return {"resultados": resultados}
+    except HTTPException as http_exc:
+        print(f"HTTPException: {http_exc.detail}")
+        raise http_exc
+    except Exception as e:
+        print(f"Excepción no manejada: {e}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Error inesperado: {str(e)}")    
+    
