@@ -317,5 +317,110 @@ async def scrape_resultados_endpoint(municipio: MunicipioInput):
     except Exception as e:
         print(f"Excepción no manejada: {e}")
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Error inesperado: {str(e)}")    
+        raise HTTPException(status_code=500, detail=f"Error inesperado: {str(e)}") 
+
+
+class SearchInput(BaseModel):
+    search_query: str
+    verification_word: str | None = None
+
+def scrape_google_search(search_query: str, verification_word: str | None = None):
+    options = webdriver.ChromeOptions()
+    options.add_argument('--ignore-certificate-errors')
+    options.add_argument('--ignore-certificate-errors-spki-list')
+    options.add_argument('--headless')
+    options.add_argument('--no-sandbox')
+    options.add_argument('--disable-dev-shm-usage')
+    options.add_argument('--disable-gpu')
+    options.add_argument('--window-size=1920,1080')
+    user_agents = [
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.1 Safari/605.1.15",
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.107 Safari/537.36"
+    ]
+    options.add_argument(f"user-agent={random.choice(user_agents)}")
+
+    try:
+        driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+        print("ChromeDriver iniciado correctamente.")
+        wait = WebDriverWait(driver, 20)
+
+        # Búsqueda en Google
+        print(f"Realizando búsqueda: {search_query}")
+        driver.get("https://www.google.com")
+        search_box = wait.until(EC.presence_of_element_located((By.NAME, "q")))
+        search_box.send_keys(search_query)
+        search_box.send_keys(Keys.RETURN)
+        
+        # Esperar y encontrar los dos primeros resultados
+        print("Esperando resultados de búsqueda...")
+        first_results = wait.until(
+            EC.presence_of_all_elements_located((By.CSS_SELECTOR, "#search .g a"))
+        )[:2]
+
+        # Si no hay palabra de verificación, devolver el primer link
+        if not verification_word:
+            first_link = first_results[0].get_attribute('href')
+            print(f"Retornando primer link: {first_link}")
+            return {"status": "success", "link": first_link}
+        
+        print(f"Verificando palabra clave: {verification_word}")
+        for i, result in enumerate(first_results, 1):
+            try:
+                link = result.get_attribute('href')
+                print(f"Analizando link #{i}: {link}")
+                result.click()
+                
+                # Esperar a que la página cargue
+                wait.until(EC.presence_of_element_located((By.TAG_NAME, "body")))
+                
+                # Obtener el texto de la página
+                page_text = driver.find_element(By.TAG_NAME, "body").text.lower()
+                
+                if verification_word.lower() in page_text:
+                    print(f"Palabra clave encontrada en link #{i}")
+                    return {
+                        "status": "success", 
+                        "message": f"Palabra '{verification_word}' encontrada en el link #{i}", 
+                        "link": link
+                    }
+                
+                print(f"Palabra clave no encontrada en link #{i}, regresando a resultados...")
+                driver.back()
+                wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "#search .g a")))
+                
+            except Exception as e:
+                print(f"Error al procesar el link #{i}: {str(e)}")
+                traceback.print_exc()
+                continue
+        
+        print("Palabra clave no encontrada en ningún resultado")
+        raise HTTPException(
+            status_code=404, 
+            detail="No se encontró la palabra clave en ninguno de los dos primeros resultados"
+        )
+        
+    except Exception as e:
+        print(f"Error durante el scraping: {str(e)}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Error durante la búsqueda: {str(e)}")
+    
+    finally:
+        driver.quit()
+        print("Navegador cerrado.")
+
+@app.post("/verify_product")
+async def verify_product_endpoint(search_input: SearchInput):
+    try:
+        print(f"Solicitud recibida para verify_product: {search_input.search_query}")
+        result = scrape_google_search(search_input.search_query, search_input.verification_word)
+        print("Respuesta enviada exitosamente.")
+        return result
+    except HTTPException as http_exc:
+        print(f"HTTPException: {http_exc.detail}")
+        raise http_exc
+    except Exception as e:
+        print(f"Excepción no manejada: {e}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Error inesperado: {str(e)}")       
     
