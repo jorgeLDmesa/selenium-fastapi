@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import traceback  # Importar traceback para obtener detalles completos de excepciones
 from selenium.webdriver.common.keys import Keys
+import urllib.parse
 
 app = FastAPI()
 
@@ -343,14 +344,11 @@ def scrape_google_search(search_query: str, verification_word: str | None = None
     try:
         driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
         print("ChromeDriver iniciado correctamente.")
-        wait = WebDriverWait(driver, 20)
+        wait = WebDriverWait(driver, 10)  # Reducido a 10 segundos
 
-        # Búsqueda en Google
-        print(f"Realizando búsqueda: {search_query}")
-        driver.get("https://www.google.com")
-        search_box = wait.until(EC.presence_of_element_located((By.NAME, "q")))
-        search_box.send_keys(search_query)
-        search_box.send_keys(Keys.RETURN)
+        # Búsqueda directa en Google usando la URL
+        search_query_encoded = urllib.parse.quote(search_query)
+        driver.get(f"https://www.google.com/search?q={search_query_encoded}")
         
         # Esperar y encontrar los dos primeros resultados
         print("Esperando resultados de búsqueda...")
@@ -411,7 +409,7 @@ def scrape_google_search(search_query: str, verification_word: str | None = None
     finally:
         driver.quit()
         print("Navegador cerrado.")
-
+        
 @app.post("/verify_product")
 async def verify_product_endpoint(search_input: SearchInput):
     try:
