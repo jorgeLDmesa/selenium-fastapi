@@ -395,10 +395,11 @@ def scrape_google_search(search_query: str, verification_word: str | None = None
                 continue
         
         print("Palabra clave no encontrada en ningún resultado")
-        raise HTTPException(
-            status_code=404, 
-            detail="No se encontró la palabra clave en ninguno de los dos primeros resultados"
-        )
+        return {
+            "status": "not_found",
+            "message": "No se encontró la palabra clave en los resultados",
+            "link": first_link
+        }
         
     except Exception as e:
         print(f"Error durante el scraping: {str(e)}")
