@@ -358,9 +358,11 @@ def scrape_google_search(search_query: str, verification_word: str | None = None
             EC.presence_of_all_elements_located((By.CSS_SELECTOR, "#search .g a"))
         )[:2]
 
+        # Guardar el primer link inmediatamente después de obtener los resultados
+        first_link = first_results[0].get_attribute('href')
+
         # Si no hay palabra de verificación, devolver el primer link
         if not verification_word:
-            first_link = first_results[0].get_attribute('href')
             print(f"Retornando primer link: {first_link}")
             return {"status": "success", "link": first_link}
         
