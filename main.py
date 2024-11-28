@@ -12,7 +12,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import traceback  # Importar traceback para obtener detalles completos de excepciones
 from selenium.webdriver.common.keys import Keys
-import urllib.parse
 
 app = FastAPI()
 
@@ -326,7 +325,6 @@ class SearchInput(BaseModel):
     verification_word: str | None = None
 
 def scrape_google_search(search_query: str, verification_word: str | None = None):
-    driver = None  # Inicializar driver como None
     options = webdriver.ChromeOptions()
     options.add_argument('--ignore-certificate-errors')
     options.add_argument('--ignore-certificate-errors-spki-list')
@@ -347,19 +345,23 @@ def scrape_google_search(search_query: str, verification_word: str | None = None
         print("ChromeDriver iniciado correctamente.")
         wait = WebDriverWait(driver, 10)
 
-        # Búsqueda en Google usando URL directa
+        # Búsqueda en Google
         print(f"Realizando búsqueda: {search_query}")
-        search_query_encoded = urllib.parse.quote(search_query)
-        driver.get(f"https://www.google.com/search?q={search_query_encoded}")
+        driver.get("https://www.google.com")
+        search_box = wait.until(EC.presence_of_element_located((By.NAME, "q")))
+        search_box.send_keys(search_query)
+        search_box.send_keys(Keys.RETURN)
         
-        # El resto del código igual...
+        # Esperar y encontrar los dos primeros resultados
         print("Esperando resultados de búsqueda...")
         first_results = wait.until(
             EC.presence_of_all_elements_located((By.CSS_SELECTOR, "#search .g a"))
         )[:2]
 
+        # Guardar el primer link inmediatamente después de obtener los resultados
         first_link = first_results[0].get_attribute('href')
 
+        # Si no hay palabra de verificación, devolver el primer link
         if not verification_word:
             print(f"Retornando primer link: {first_link}")
             return {"status": "success", "link": first_link}
@@ -371,8 +373,10 @@ def scrape_google_search(search_query: str, verification_word: str | None = None
                 print(f"Analizando link #{i}: {link}")
                 result.click()
                 
+                # Esperar a que la página cargue
                 wait.until(EC.presence_of_element_located((By.TAG_NAME, "body")))
                 
+                # Obtener el texto de la página
                 page_text = driver.find_element(By.TAG_NAME, "body").text.lower()
                 
                 if verification_word.lower() in page_text:
@@ -405,9 +409,8 @@ def scrape_google_search(search_query: str, verification_word: str | None = None
         raise HTTPException(status_code=500, detail=f"Error durante la búsqueda: {str(e)}")
     
     finally:
-        if driver:  # Solo cerrar el driver si fue creado exitosamente
-            driver.quit()
-            print("Navegador cerrado.")
+        driver.quit()
+        print("Navegador cerrado.")
 
 @app.post("/verify_product")
 async def verify_product_endpoint(search_input: SearchInput):
