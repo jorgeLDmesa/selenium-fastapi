@@ -623,9 +623,10 @@ async def product_images_endpoint(payload: StoreDataInput):
                 link = search_in_google_images(query, driver)
             
             results.append({
-                "name": item.Model + "_" + description + "_" + item.Unit_Retail + "_" + item.Brand,
+                "name": f"{item.Model or 'UnknownModel'}_{description or 'UnknownDescription'}_{item.Unit_Retail or 'UnknownPrice'}_{item.Brand or 'UnknownBrand'}",
                 "image_link": link
-            })
+    })
+
     finally:
         driver.quit()
 
