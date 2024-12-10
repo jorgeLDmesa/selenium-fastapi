@@ -1,17 +1,21 @@
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+import json
+import random
+import traceback
+import time
+import re
+from typing import Optional, List, Dict, Any
+
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from webdriver_manager.chrome import ChromeDriverManager
-import time
-import json
-import random
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-import traceback  # Importar traceback para obtener detalles completos de excepciones
 from selenium.webdriver.common.keys import Keys
+from webdriver_manager.chrome import ChromeDriverManager
+
 
 app = FastAPI()
 
@@ -26,7 +30,35 @@ app.add_middleware(
 class DireccionInput(BaseModel):
     direccion: str
 
-# Configurar el navegador
+class MunicipioInput(BaseModel):
+    municipio: str
+
+class SearchInput(BaseModel):
+    search_query: str
+    verification_word: Optional[str] = None
+
+class StoreDataItem(BaseModel):
+    Pallet_ID: Optional[str] = None
+    Item: Optional[str] = None
+    Product_Class: Optional[str] = None
+    Category_Code: Optional[str] = None
+    Category: Optional[str] = None
+    Item_Description: str
+    Qty: Optional[str] = None
+    Unit_Retail: Optional[str] = None
+    Ext_Retail: Optional[str] = None
+    Origin: Optional[str] = None
+    UPC: Optional[str] = None
+    TCIN: Optional[str] = None
+    Brand: Optional[str] = None
+    Division_Name: Optional[str] = None
+    Subcategory: Optional[str] = None
+    Department: Optional[str] = None
+
+class StoreDataInput(BaseModel):
+    store: str
+    data: List[StoreDataItem]
+
 def scrape_direccion(direccion: str):
     options = webdriver.ChromeOptions()
     options.add_argument('--ignore-certificate-errors')
@@ -49,45 +81,37 @@ def scrape_direccion(direccion: str):
         print("ChromeDriver iniciado correctamente.")
     except Exception as e:
         print(f"Error al iniciar ChromeDriver: {e}")
-        traceback.print_exc()  # Imprimir el stack trace completo
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Error al iniciar el navegador: {str(e)}")
 
-    # Inicializar el diccionario para almacenar los resultados
     resultados = {}
 
     try:
-        # Navega a la página
         driver.get('https://www.medellin.gov.co/mapgis9/mapa.jsp?aplicacion=41')
         print("Página cargada")
 
-        # Espera que el botón "Aceptar" esté presente en el DOM y haz clic en él
         WebDriverWait(driver, 20).until(
             EC.visibility_of_element_located((By.CSS_SELECTOR, 'button.btn.btn-siguiente.ajs-ok'))
         ).click()
         print('Botón "Aceptar" clickeado')
 
-        # Espera a que el iframe con id "frmUtilidad53" esté presente
         WebDriverWait(driver, 30).until(
             EC.presence_of_element_located((By.ID, 'frmUtilidad53'))
         )
         print('iframe encontrado')
 
-        # Cambia al contexto del iframe
         iframe = driver.find_element(By.ID, 'frmUtilidad53')
         driver.switch_to.frame(iframe)
         print('Cambio al contexto del iframe realizado.')
 
-        # Espera a que el campo de búsqueda esté disponible dentro del iframe
         search_input = WebDriverWait(driver, 30).until(
             EC.visibility_of_element_located((By.ID, 'strBusqueda'))
         )
         print('Campo de búsqueda encontrado')
 
-        # Ingresa la dirección o texto que desees
         search_input.send_keys(direccion)
         print('Dirección ingresada:', direccion)
 
-        # Espera a que el botón "Buscar" esté disponible y haz clic en él
         search_button = WebDriverWait(driver, 10).until(
             EC.element_to_be_clickable((By.ID, 'buscar'))
         )
@@ -96,17 +120,14 @@ def scrape_direccion(direccion: str):
 
         driver.implicitly_wait(30)
 
-        # Añadir log antes de esperar por 'strCbml'
         print('Esperando el campo "strCbml"')
 
-        # Espera a que aparezca el campo oculto strCbml y tenga un valor
         try:
             WebDriverWait(driver, 60).until(
                 lambda driver: driver.find_element(By.ID, 'strCbml').get_attribute('value') != ''
             )
             print('"strCbml" encontrado y tiene un valor.')
 
-            # Obtiene el valor del campo strCbml
             strCbml_element = driver.find_element(By.ID, 'strCbml')
             strCbml_value = strCbml_element.get_attribute('value')
             if not strCbml_value:
@@ -115,19 +136,16 @@ def scrape_direccion(direccion: str):
             print('Valor de strCbml:', strCbml_value)
         except Exception as e:
             print(f"Error al obtener strCbml: {e}")
-            traceback.print_exc()  # Imprimir el stack trace completo
+            traceback.print_exc()
             with open('pagina_error.html', 'w', encoding='utf-8') as f:
                 f.write(driver.page_source)
             raise HTTPException(status_code=500, detail=f"Error durante el scraping: {str(e)}")
 
-        # Itera sobre los radio buttons del 1 al 15 usando XPath
         for i in range(1, 16):
             try:
-                # Construir el XPath dinámico para los radio buttons
                 radio_button_xpath = f'//input[@type="radio" and @id="{i}"]'
                 print(f'Intentando localizar el radio button {i} usando XPath: {radio_button_xpath}')
 
-                # Espera a que el radio button esté presente y sea clickeable
                 radio_button = WebDriverWait(driver, 10).until(
                     EC.element_to_be_clickable((By.XPATH, radio_button_xpath))
                 )
@@ -136,21 +154,17 @@ def scrape_direccion(direccion: str):
                 valor_radio = radio_button.get_attribute("value")
                 print(f'Valor del radio button {i}: {valor_radio}')
 
-                # Hacer clic en el radio button
                 radio_button.click()
                 print(f'Radio button {i} clickeado')
 
-                # Comprobar si aparece la alerta de "no datos"
                 try:
                     alert_element = driver.find_element(By.ID, 'noDatos')
                     if alert_element.is_displayed():
                         print(f'Alerta "no datos" mostrada para el radio button {i}')
                         continue
                 except:
-                    # Si no existe la alerta, entonces continúa
                     print(f'No se encontró alerta "no datos" para el radio button {i}')
 
-                # Si no hay alerta, busca la tabla
                 try:
                     result_table = WebDriverWait(driver, 10).until(
                         EC.presence_of_element_located((By.CSS_SELECTOR, 'table#res0'))
@@ -161,23 +175,19 @@ def scrape_direccion(direccion: str):
                         tbody = result_table.find_element(By.TAG_NAME, 'tbody')
                         rows = tbody.find_elements(By.TAG_NAME, 'tr')
                         table_data = [' | '.join([cell.text for cell in row.find_elements(By.TAG_NAME, 'td')]) for row in rows]
-
-                        # Guardar los datos en el diccionario
                         resultados[valor_radio] = table_data
                         print(f'Datos guardados para el radio button {i}')
 
                 except Exception as e:
                     print(f'Error al buscar tabla para el radio button {i}: {e}')
-                    traceback.print_exc()  # Imprimir el stack trace completo
+                    traceback.print_exc()
 
             except Exception as e:
                 print(f'Error en el radio button {i}: {e}')
-                traceback.print_exc()  # Imprimir el stack trace completo
+                traceback.print_exc()
 
-            # Pausa pequeña entre iteraciones
             time.sleep(0.5)
 
-        # Convertir el diccionario a JSON
         json_resultados = json.dumps(resultados, ensure_ascii=False)
         print('Scraping completado exitosamente.')
         return json_resultados
@@ -187,12 +197,12 @@ def scrape_direccion(direccion: str):
         raise http_exc
     except Exception as e:
         print(f"Excepción en scrape_direccion: {e}")
-        traceback.print_exc()  # Imprimir el stack trace completo
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Error durante el scraping: {str(e)}")
     finally:
-        # Cierra el navegador
         driver.quit()
         print("Navegador cerrado.")
+
 
 @app.post("/scrape_direccion")
 async def scrape_direccion_endpoint(direccion: DireccionInput):
@@ -206,11 +216,9 @@ async def scrape_direccion_endpoint(direccion: DireccionInput):
         raise http_exc
     except Exception as e:
         print(f"Excepción no manejada: {e}")
-        traceback.print_exc()  # Imprimir el stack trace completo
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Error inesperado: {str(e)}")
-    
-class MunicipioInput(BaseModel):
-    municipio: str
+
 
 def scrape_resultados_electorales(municipio: str):
     options = webdriver.ChromeOptions()
@@ -227,11 +235,9 @@ def scrape_resultados_electorales(municipio: str):
         driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
         wait = WebDriverWait(driver, 20)
         
-        # Cargar la página
         url = "https://resultadospreccongreso.registraduria.gov.co/senado/0"
         driver.get(url)
         
-        # Buscar municipio
         search_input = WebDriverWait(driver, 20).until(
             EC.element_to_be_clickable((By.ID, "downshift-0-input"))
         )
@@ -243,25 +249,21 @@ def scrape_resultados_electorales(municipio: str):
         search_input.send_keys(Keys.ENTER)
         time.sleep(5)
 
-        # Esperar a que los botones estén presentes
         js_script = "return document.querySelectorAll('div.containerMasMenos button').length > 0;"
         wait.until(lambda driver: driver.execute_script(js_script))
         
-        # Recolectar información de partidos
         partidos_info = {}
         nombres_partidos = driver.find_elements(By.CLASS_NAME, "FilaTablaPartidos__NombrePartido-jcnt0x-7")
         porcentajes = driver.find_elements(By.CLASS_NAME, "porcAgr")
         votos = driver.find_elements(By.CLASS_NAME, "numAgr")
         
-        for nombre, porcentaje, votos in zip(nombres_partidos, porcentajes, votos):
-            partidos_info[nombre.text] = {"porcentaje": porcentaje.text, "votos": votos.text, "candidatos": []}
+        for nombre, porcentaje, voto in zip(nombres_partidos, porcentajes, votos):
+            partidos_info[nombre.text] = {"porcentaje": porcentaje.text, "votos": voto.text, "candidatos": []}
 
-        # Obtener botones
         botones = driver.execute_script(
             "return Array.from(document.querySelectorAll('div.containerMasMenos button'));"
         )
 
-        # Procesar candidatos para cada partido
         for boton, partido_nombre in zip(botones, partidos_info.keys()):
             driver.execute_script("arguments[0].scrollIntoView(true);", boton)
             time.sleep(1)
@@ -279,12 +281,12 @@ def scrape_resultados_electorales(municipio: str):
                 try:
                     nombre = candidato.find_element(By.CLASS_NAME, "FilaTablaPartidos__NombreCandidato-jcnt0x-4").text
                     porcentaje = candidato.find_element(By.CLASS_NAME, "percent").text
-                    votos = candidato.find_elements(By.TAG_NAME, "p")[2].text
+                    voto_cand = candidato.find_elements(By.TAG_NAME, "p")[2].text
                     
                     partidos_info[partido_nombre]["candidatos"].append({
                         "nombre": nombre,
                         "porcentaje": porcentaje,
-                        "votos": votos
+                        "votos": voto_cand
                     })
                     
                     candidatos_procesados += 1
@@ -317,14 +319,10 @@ async def scrape_resultados_endpoint(municipio: MunicipioInput):
     except Exception as e:
         print(f"Excepción no manejada: {e}")
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Error inesperado: {str(e)}") 
+        raise HTTPException(status_code=500, detail=f"Error inesperado: {str(e)}")
 
 
-class SearchInput(BaseModel):
-    search_query: str
-    verification_word: str | None = None
-
-def scrape_google_search(search_query: str, verification_word: str | None = None):
+def scrape_google_search(search_query: str, verification_word: Optional[str] = None):
     options = webdriver.ChromeOptions()
     options.add_argument('--ignore-certificate-errors')
     options.add_argument('--ignore-certificate-errors-spki-list')
@@ -345,23 +343,19 @@ def scrape_google_search(search_query: str, verification_word: str | None = None
         print("ChromeDriver iniciado correctamente.")
         wait = WebDriverWait(driver, 10)
 
-        # Búsqueda en Google
         print(f"Realizando búsqueda: {search_query}")
         driver.get("https://www.google.com")
         search_box = wait.until(EC.presence_of_element_located((By.NAME, "q")))
         search_box.send_keys(search_query)
         search_box.send_keys(Keys.RETURN)
         
-        # Esperar y encontrar los dos primeros resultados
         print("Esperando resultados de búsqueda...")
         first_results = wait.until(
             EC.presence_of_all_elements_located((By.CSS_SELECTOR, "#search .g a"))
         )[:2]
 
-        # Guardar el primer link inmediatamente después de obtener los resultados
         first_link = first_results[0].get_attribute('href')
 
-        # Si no hay palabra de verificación, devolver el primer link
         if not verification_word:
             print(f"Retornando primer link: {first_link}")
             return {"status": "success", "link": first_link}
@@ -373,10 +367,8 @@ def scrape_google_search(search_query: str, verification_word: str | None = None
                 print(f"Analizando link #{i}: {link}")
                 result.click()
                 
-                # Esperar a que la página cargue
                 wait.until(EC.presence_of_element_located((By.TAG_NAME, "body")))
                 
-                # Obtener el texto de la página
                 page_text = driver.find_element(By.TAG_NAME, "body").text.lower()
                 
                 if verification_word.lower() in page_text:
@@ -425,5 +417,215 @@ async def verify_product_endpoint(search_input: SearchInput):
     except Exception as e:
         print(f"Excepción no manejada: {e}")
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Error inesperado: {str(e)}")       
-    
+        raise HTTPException(status_code=500, detail=f"Error inesperado: {str(e)}")
+
+
+# ------------------- NUEVO ENDPOINT -------------------
+
+def extract_image_src(driver):
+    try:
+        modal_div = WebDriverWait(driver, 5).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, 'div[jsname="figiqf"]'))
+        )
+        first_image = modal_div.find_element(By.TAG_NAME, "img")
+        image_src = first_image.get_attribute("src")
+        print(f"URL de la imagen encontrada: {image_src}")
+        return image_src
+    except Exception as e:
+        print(f"Error al extraer la imagen: {e}")
+        return None    
+
+def search_in_google_images(query, driver):
+    try:
+        driver.get("https://www.google.com/imghp")
+        search_box = WebDriverWait(driver, 5).until(
+            EC.presence_of_element_located((By.NAME, "q"))
+        )
+        search_box.send_keys(query)
+        search_box.send_keys(Keys.RETURN)
+        
+        WebDriverWait(driver, 5).until(
+            EC.presence_of_element_located((By.ID, "rso"))
+        )
+
+        rso_div = driver.find_element(By.ID, "rso")
+        first_img = rso_div.find_element(By.TAG_NAME, "img")
+        first_img.click()
+
+        image_link = extract_image_src(driver)
+        return image_link
+    except Exception as e:
+        print(f"Error al buscar en Google Imágenes para '{query}': {e}")
+        return None
+
+def get_costco_image_link(query, driver):
+    try:
+        driver.get("https://www.google.com")
+        
+        search_box = WebDriverWait(driver, 5).until(
+            EC.presence_of_element_located((By.NAME, "q"))
+        )
+        search_box.send_keys(query)
+        search_box.send_keys(Keys.RETURN)
+
+        WebDriverWait(driver, 5).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, "h3"))
+        )
+
+        first_result = driver.find_element(By.CSS_SELECTOR, "h3")
+        first_result.click()
+
+        time.sleep(1)
+        images = driver.find_elements(By.XPATH, "//img[@alt='Product Preview 1']")
+        
+        if not images:
+            print("No se encontró 'Product Preview 1' en Costco.")
+            return None
+        
+        largest_canvas = 0
+        largest_canvas_link = None
+        
+        for img in images:
+            src = img.get_attribute("src")
+            canvas_match = re.search(r"canvas=(\d+),(\d+)", src)
+            if canvas_match:
+                width, height = map(int, canvas_match.groups())
+                canvas_size = width * height
+                if canvas_size > largest_canvas:
+                    largest_canvas = canvas_size
+                    largest_canvas_link = src
+        
+        return largest_canvas_link
+    except Exception as e:
+        print(f"Error al procesar el query '{query}' para Costco: {e}")
+        return None
+
+def get_amazon_image_link(query, driver):
+    try:
+        driver.get("https://www.google.com")
+        
+        search_box = WebDriverWait(driver, 5).until(
+            EC.presence_of_element_located((By.NAME, "q"))
+        )
+        search_box.send_keys(query)
+        search_box.send_keys(Keys.RETURN)
+
+        WebDriverWait(driver, 5).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, "h3"))
+        )
+
+        first_result = driver.find_element(By.CSS_SELECTOR, "h3")
+        first_result.click()
+        time.sleep(1)
+
+        try:
+            landing_image = driver.find_element(By.XPATH, "//img[@data-a-image-name='landingImage']")
+            data_dynamic_image = landing_image.get_attribute("data-a-dynamic-image")
+            image_dict = json.loads(data_dynamic_image)
+            
+            largest_area = 0
+            largest_url = None
+            
+            for url, dims in image_dict.items():
+                w, h = dims
+                area = w * h
+                if area > largest_area:
+                    largest_area = area
+                    largest_url = url
+            
+            return largest_url
+        except:
+            print("No se encontró la imagen 'landingImage' en Amazon.")
+            return None
+    except Exception as e:
+        print(f"Error al procesar el query '{query}' para Amazon: {e}")
+        return None
+
+def get_target_image_link(query, driver):
+    try:
+        driver.get("https://www.google.com")
+        
+        search_box = WebDriverWait(driver, 5).until(
+            EC.presence_of_element_located((By.NAME, "q"))
+        )
+        search_box.send_keys(query)
+        search_box.send_keys(Keys.RETURN)
+
+        WebDriverWait(driver, 5).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, "h3"))
+        )
+
+        first_result = driver.find_element(By.CSS_SELECTOR, "h3")
+        first_result.click()
+        time.sleep(1)
+
+        try:
+            img = driver.find_element(By.CSS_SELECTOR, "div[tabindex='-1'] img")
+            srcset = img.get_attribute("srcset")
+            if not srcset:
+                return img.get_attribute("src")
+            
+            candidates = srcset.split(",")
+            max_width = 0
+            best_url = None
+            for candidate in candidates:
+                parts = candidate.strip().split(" ")
+                if len(parts) == 2:
+                    url, size = parts
+                    if size.endswith("w"):
+                        width = int(size.replace("w", ""))
+                        if width > max_width:
+                            max_width = width
+                            best_url = url
+            return best_url if best_url else img.get_attribute("src")
+        except:
+            print("No se encontró la imagen en Target.")
+            return None
+    except Exception as e:
+        print(f"Error al procesar el query '{query}' para Target: {e}")
+        return None
+
+
+@app.post("/get_images")
+async def get_images_endpoint(payload: StoreDataInput):
+    store = payload.store
+    data = payload.data
+
+    chrome_options = webdriver.ChromeOptions()
+    chrome_options.add_argument("--headless")
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+
+    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
+    results = []
+    try:
+        for item in data:
+            description = item.Item_Description
+            query = f"{description} {store}"
+            print(f"Buscando: {query}")
+
+            if store.lower() == "costco":
+                link = get_costco_image_link(query, driver)
+                if not link:
+                    link = search_in_google_images(query, driver)
+            elif store.lower() == "amazon":
+                link = get_amazon_image_link(query, driver)
+                if not link:
+                    link = search_in_google_images(query, driver)
+            elif store.lower() == "target":
+                link = get_target_image_link(query, driver)
+                if not link:
+                    link = search_in_google_images(query, driver)
+            else:
+                # Si no es Costco, Amazon ni Target, buscar directamente en Google Images
+                link = search_in_google_images(query, driver)
+            
+            results.append({
+                "Item Description": description,
+                "image_link": link
+            })
+    finally:
+        driver.quit()
+
+    return {"results": results}
