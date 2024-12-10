@@ -54,6 +54,7 @@ class StoreDataItem(BaseModel):
     Division_Name: Optional[str] = None
     Subcategory: Optional[str] = None
     Department: Optional[str] = None
+    Model: Optional[str] = None
 
 class StoreDataInput(BaseModel):
     store: str
@@ -622,7 +623,7 @@ async def product_images_endpoint(payload: StoreDataInput):
                 link = search_in_google_images(query, driver)
             
             results.append({
-                "Item Description": description,
+                "name": item.Model + "_" + description + "_" + item.Unit_Retail + "_" + item.Brand,
                 "image_link": link
             })
     finally:
