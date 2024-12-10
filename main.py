@@ -586,8 +586,8 @@ def get_target_image_link(query, driver):
         return None
 
 
-@app.post("/get_images")
-async def get_images_endpoint(payload: StoreDataInput):
+@app.post("/product_images")
+async def product_images_endpoint(payload: StoreDataInput):
     store = payload.store
     data = payload.data
 
